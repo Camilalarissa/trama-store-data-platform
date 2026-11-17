@@ -1,0 +1,4 @@
+# Dependências para rodar os testes localmente e no GitHub Actions (Python 3.12 + Java 17)
+pyspark==4.0.1
+pytest==8.3.5
+ruff==0.16.9

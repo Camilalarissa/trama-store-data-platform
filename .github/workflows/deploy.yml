@@ -1,0 +1,32 @@
+# Implanta o bundle no Databricks (execução manual pela aba Actions).
+#
+# Configure em Settings → Secrets and variables → Actions:
+#   DATABRICKS_HOST   ex.: https://dbc-xxxx.cloud.databricks.com
+#   DATABRICKS_TOKEN  token de acesso pessoal (User Settings → Developer → Access tokens)
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente (target do bundle)
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: databricks/setup-cli@main
+
+      - name: Validar bundle
+        run: databricks bundle validate -t ${{ inputs.ambiente }}
+
+      - name: Implantar bundle
+        run: databricks bundle deploy -t ${{ inputs.ambiente }}

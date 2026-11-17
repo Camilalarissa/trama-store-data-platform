@@ -1,0 +1,80 @@
+# Job diário: landing → bronze → silver → gold
+#
+#   setup → gerar_dados → bronze_ingestao ─┬→ silver_cadastros ─┐
+#                                          ├→ silver_vendas    ─┼→ gold
+#                                          └→ silver_estoque   ─┘
+#
+# Sem configuração de cluster: as tasks rodam em compute serverless.
+
+resources:
+  jobs:
+    pipeline_diario:
+      name: trama_pipeline_diario
+      description: Pipeline diário da Trama Store (varejo de moda omnichannel fictício)
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"   # todo dia às 6h
+        timezone_id: America/Sao_Paulo
+        pause_status: UNPAUSED                   # no target dev, o modo development pausa
+
+      # Parâmetros do Job: chegam a todos os notebooks como widgets
+      parameters:
+        - name: catalogo
+          default: ${var.catalogo}
+        - name: data_ref
+          default: "{{job.start_time.iso_date}}"
+        - name: dias_historico
+          default: "0"   # use 30 na primeira execução para gerar um histórico
+
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}
+
+      tasks:
+        - task_key: setup
+          notebook_task:
+            notebook_path: ../src/notebooks/00_setup.py
+
+        - task_key: gerar_dados
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ../src/notebooks/01_gerar_dados.py
+
+        - task_key: bronze_ingestao
+          depends_on:
+            - task_key: gerar_dados
+          # Se o Auto Loader encontrar uma coluna nova, o stream para de propósito
+          # para registrar o schema; a nova tentativa continua a carga.
+          max_retries: 1
+          min_retry_interval_millis: 30000
+          notebook_task:
+            notebook_path: ../src/notebooks/02_bronze_ingestao.py
+
+        - task_key: silver_cadastros
+          depends_on:
+            - task_key: bronze_ingestao
+          notebook_task:
+            notebook_path: ../src/notebooks/03_silver_cadastros.py
+
+        - task_key: silver_vendas
+          depends_on:
+            - task_key: bronze_ingestao
+          notebook_task:
+            notebook_path: ../src/notebooks/04_silver_vendas.py
+
+        - task_key: silver_estoque
+          depends_on:
+            - task_key: bronze_ingestao
+          notebook_task:
+            notebook_path: ../src/notebooks/05_silver_estoque.py
+
+        - task_key: gold
+          depends_on:
+            - task_key: silver_cadastros
+            - task_key: silver_vendas
+            - task_key: silver_estoque
+          notebook_task:
+            notebook_path: ../src/notebooks/06_gold.sql

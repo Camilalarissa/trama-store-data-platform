@@ -1,0 +1,24 @@
+# Databricks
+.databricks/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Spark local (testes)
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Segredos: nunca versionar
+.env
+*.pem
+credenciais*.json
+
+# Editores
+.vscode/
+.idea/
+.DS_Store

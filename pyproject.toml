@@ -1,0 +1,22 @@
+[project]
+name = "trama-store-data-platform"
+version = "0.1.0"
+description = "Plataforma de dados de um varejo de moda omnichannel fictício no Databricks"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Notebooks: spark, dbutils e as variáveis do %run ./_comum só existem no Databricks,
+# e os imports vêm depois das células de widgets.
+"src/notebooks/*.py" = ["F821", "E402", "I001"]

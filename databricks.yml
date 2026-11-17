@@ -1,0 +1,40 @@
+# Declarative Automation Bundle (antigo Databricks Asset Bundle)
+# Descreve o projeto como código: o Job, seus notebooks e os ambientes (dev e prod).
+#
+# Comandos principais (Databricks CLI):
+#   databricks bundle validate          # confere a configuração
+#   databricks bundle deploy -t dev     # implanta no ambiente de desenvolvimento
+#   databricks bundle run -t dev pipeline_diario
+#   databricks bundle deploy -t prod    # implanta em produção
+
+bundle:
+  name: trama_store
+
+include:
+  - resources/*.yml
+
+variables:
+  catalogo:
+    description: Catálogo do Unity Catalog onde o projeto cria seus schemas e tabelas
+    default: trama_store_dev
+
+sync:
+  exclude:
+    - tests/**
+    - docs/**
+    - .github/**
+
+targets:
+  dev:
+    # Prefixa os recursos com [dev <usuário>] e pausa os agendamentos
+    mode: development
+    default: true
+    variables:
+      catalogo: trama_store_dev
+
+  prod:
+    mode: production
+    variables:
+      catalogo: trama_store
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
