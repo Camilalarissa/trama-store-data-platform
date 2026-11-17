@@ -41,19 +41,15 @@ for origem, transformar in [("pdv_vendas", limpar_vendas_pdv), ("ecommerce_pedid
         coluna_versao="atualizado_em",
         regras=REGRAS_VENDAS,
         destino_rejeitados=f"{CATALOGO}.silver.vendas_rejeitadas",
+        agrupar_por=["data_venda", "canal"],  # colunas mais filtradas (Liquid Clustering)
     )
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Organização física: Liquid Clustering
-# MAGIC Agrupa os arquivos pelas colunas mais filtradas. O `OPTIMIZE` aplica o clustering
-# MAGIC (com predictive optimization ativa, o Databricks faz isso sozinho).
-
-# COMMAND ----------
-
-spark.sql(f"ALTER TABLE {CATALOGO}.silver.vendas_itens CLUSTER BY (data_venda, canal)")
-spark.sql(f"OPTIMIZE {CATALOGO}.silver.vendas_itens")
+# MAGIC ### Conferência
+# MAGIC O Liquid Clustering por `data_venda` e `canal` é definido na criação da tabela
+# MAGIC (`agrupar_por`). Sem `OPTIMIZE` manual: a predictive optimization cuida disso (D13).
 
 # COMMAND ----------
 

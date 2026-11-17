@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: databricks/setup-cli@main
+      - uses: databricks/setup-cli@v1.26.0   # versão fixa: deploy reprodutível
 
       - name: Validar bundle
         run: databricks bundle validate -t ${{ inputs.ambiente }}

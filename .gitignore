@@ -18,7 +18,8 @@ derby.log
 *.pem
 credenciais*.json
 
-# Editores
-.vscode/
+# Editores (só as extensões recomendadas do VS Code são versionadas)
+.vscode/*
+!.vscode/extensions.json
 .idea/
 .DS_Store

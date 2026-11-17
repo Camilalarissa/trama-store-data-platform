@@ -67,7 +67,7 @@ flowchart LR
 | **Qualidade de dados** | Regras declaradas em código e quarentena com motivo da rejeição |
 | **Modelagem** | Vendas de loja e digital no mesmo esquema; modelo estrela na Gold |
 | **Governança e LGPD** | Unity Catalog (catálogo por ambiente, schemas por camada, Volumes); CPF só como hash; Gold sem dados pessoais |
-| **Performance** | Liquid Clustering, `OPTIMIZE`, tabelas de KPI pré-agregadas |
+| **Performance** | Liquid Clustering definido na criação das tabelas, predictive optimization, tabelas de KPI pré-agregadas |
 | **Engenharia de software** | Lógica em funções puras testadas com pytest e Spark local (inclusive o SQL da Gold) |
 | **CI/CD** | Bundle com targets `dev`/`prod`, GitHub Actions para testes e deploy |
 

@@ -94,3 +94,42 @@ decisão mudar, ela não é apagada: ganha uma nova entrada explicando a mudanç
 - **Por quê:** com o volume atual, recriar é rápido, simples e sempre coerente com a
   Silver. Quando o volume crescer, migrar para **materialized views** com atualização
   incremental (ver roadmap).
+
+## D12 · JSON aninhado convertido na Silver com `from_json`
+
+- **Contexto:** sem `cloudFiles.inferColumnTypes`, o Auto Loader entrega toda coluna de
+  primeiro nível do JSON como STRING, inclusive objetos e arrays aninhados (`itens`,
+  `entrega`, `endereco`...). Os testes liam com `spark.read.json` + `primitivesAsString`, que
+  mantém as structs, e por isso não pegavam o erro: a Silver quebraria no Databricks.
+- **Decisão:** manter a Bronze como texto (D04) e converter os campos aninhados na Silver com
+  `from_json` e schemas explícitos (`ESQUEMAS_JSON_PEDIDOS` e `ESQUEMAS_JSON_CLIENTES`). As
+  folhas do schema também são STRING; a tipagem continua com `cast`.
+- **Por quê:** schema explícito é contrato: um campo novo na fonte não muda a Silver sem
+  alguém decidir. A alternativa (`schemaHints` no Auto Loader) espalharia tipagem pela Bronze.
+- **Consequência:** o `conftest.py` passou a ler o JSON como o Auto Loader (tudo STRING no
+  primeiro nível). JSON inválido não derruba o lote: os campos viram nulos e a linha cai nas
+  regras de qualidade. Lição: um teste que imita produção precisa imitar de verdade.
+
+## D13 · Liquid Clustering definido na criação das tabelas
+
+- **Contexto:** os notebooks 04 e 05 rodavam `ALTER TABLE ... CLUSTER BY` e `OPTIMIZE` a cada
+  execução.
+- **Decisão:** definir o clustering uma vez, na criação da tabela (`agrupar_por` em
+  `processar_incremental`, que usa `DataFrameWriter.clusterBy`), sem `OPTIMIZE` manual.
+- **Por quê:** a predictive optimization das tabelas gerenciadas do Unity Catalog já roda o
+  `OPTIMIZE` quando compensa. Rodar a cada carga gasta compute serverless, que tem cota.
+- **Consequência:** tabelas criadas antes desta mudança não ganham clustering sozinhas; num
+  ambiente novo isso não acontece.
+
+## D14 · Trava para a carga histórica e data no horário de Brasília
+
+- **Contexto:** o gerador consome números aleatórios numa ordem diferente quando o dia tem
+  carga inicial. Rodar `dias_historico=30` de novo, com outra data de início, regravaria dias
+  já ingeridos com conteúdo diferente e o mesmo nome. O Auto Loader ignora arquivo
+  sobrescrito, então a Bronze ficaria diferente da landing sem aviso. Além disso, o
+  serverless roda em UTC: depois das 21h, `date.today()` já é o dia seguinte em Brasília.
+- **Decisão:** o notebook 01 recusa `dias_historico > 0` quando a landing já tem a carga
+  inicial (`ja_tem_carga_inicial`), e a data padrão vem de `hoje_brasilia()`.
+- **Por quê:** é melhor falhar alto do que divergir em silêncio.
+- **Consequência:** para recomeçar a carga histórica, apague os volumes `landing` e
+  `checkpoints` e as tabelas do catálogo.

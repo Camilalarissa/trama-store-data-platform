@@ -2,7 +2,7 @@ import csv
 import json
 from datetime import date
 
-from trama.gerador import LOJAS, PRODUTOS, gerar_dia
+from trama.gerador import LOJAS, PRODUTOS, gerar_dia, ja_tem_carga_inicial
 
 
 def test_mesma_data_gera_os_mesmos_arquivos(tmp_path):
@@ -40,3 +40,21 @@ def test_ecommerce_tem_cancelamentos_e_horario_utc(tmp_path):
     eventos = [json.loads(linha) for linha in linhas]
     assert any(evento["status"] == "cancelado" for evento in eventos)
     assert all(evento["criado_em"].endswith("Z") for evento in eventos)
+
+
+def test_carga_inicial_muda_o_conteudo_do_dia(tmp_path):
+    """Motivo da trava do histórico (D14): o mesmo dia gerado com e sem carga inicial
+    produz arquivos diferentes com o mesmo nome. Rodar o histórico de novo, com outra data
+    de início, regravaria dias já ingeridos, e o Auto Loader não releria esses arquivos."""
+    gerar_dia(date(2026, 10, 1), tmp_path / "a", carga_inicial=True)
+    gerar_dia(date(2026, 10, 1), tmp_path / "b", carga_inicial=False)
+    arquivo = "ecommerce_pedidos/pedidos_20261001.json"
+    assert (tmp_path / "a" / arquivo).read_text() != (tmp_path / "b" / arquivo).read_text()
+
+
+def test_detecta_carga_inicial_na_landing(tmp_path):
+    assert not ja_tem_carga_inicial(tmp_path)
+    gerar_dia(date(2026, 10, 1), tmp_path, carga_inicial=False)
+    assert not ja_tem_carga_inicial(tmp_path)  # dia comum não traz o cadastro de lojas
+    gerar_dia(date(2026, 10, 2), tmp_path, carga_inicial=True)
+    assert ja_tem_carga_inicial(tmp_path)

@@ -25,9 +25,8 @@ processar_incremental(
     checkpoint=f"{CHECKPOINTS}/silver_estoque",
     transformar=padronizar_estoque,
     chaves=["data_estoque", "id_local", "sku"],
+    agrupar_por=["data_estoque", "id_local"],  # Liquid Clustering definido na criação (D13)
 )
-
-spark.sql(f"ALTER TABLE {CATALOGO}.silver.estoque CLUSTER BY (data_estoque, id_local)")
 
 # COMMAND ----------
 

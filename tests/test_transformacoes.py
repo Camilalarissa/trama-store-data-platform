@@ -5,7 +5,9 @@ from pyspark.sql import functions as F
 
 from trama.transformacoes import (
     COLUNAS_VENDAS,
+    ESQUEMAS_JSON_PEDIDOS,
     REGRAS_VENDAS,
+    expandir_json,
     limpar_vendas_pdv,
     padronizar_clientes,
     padronizar_estoque,
@@ -112,3 +114,24 @@ def test_cadastros_e_estoque_tipados(ler_bronze):
     estoque = padronizar_estoque(ler_bronze("estoque"))
     assert dict(estoque.dtypes)["qtd_disponivel"] == "int"
     assert estoque.filter("qtd_disponivel = 0").count() > 0
+
+
+def test_expandir_json_converte_texto_e_mantem_struct(spark):
+    texto = '{"sku": "SKU1", "quantidade": 2, "preco_unitario": 59.9, "desconto": 0.0}'
+    df = spark.createDataFrame([(f"[{texto}]", "não é json")], ["itens", "entrega"])
+    convertido = expandir_json(df, ESQUEMAS_JSON_PEDIDOS)
+    item = convertido.first().itens[0]
+    # Números do JSON viram texto: a tipagem continua com cast na Silver (D04)
+    assert (item.sku, item.quantidade, item.preco_unitario) == ("SKU1", "2", "59.9")
+    # JSON inválido não derruba o lote: vira struct com todos os campos nulos
+    assert all(valor is None for valor in convertido.first().entrega)
+    # Coluna que já é struct/array não é tocada (casos de teste montados à mão)
+    assert expandir_json(convertido, ESQUEMAS_JSON_PEDIDOS).schema == convertido.schema
+
+
+def test_json_aninhado_da_bronze_nao_perde_valores(ler_bronze):
+    """Se o from_json errasse o schema, os campos virariam nulo em silêncio."""
+    ecommerce = preparar_pedidos_ecommerce(ler_bronze("ecommerce_pedidos"))
+    assert ecommerce.filter("sku IS NULL OR preco_unitario IS NULL OR forma_pagamento IS NULL").count() == 0
+    clientes = padronizar_clientes(ler_bronze("crm_clientes"))
+    assert clientes.filter("uf IS NULL OR cartao_trama IS NULL OR aceita_marketing IS NULL").count() == 0

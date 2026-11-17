@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pyspark.sql import Column, DataFrame, Window
 from pyspark.sql import functions as F
+from pyspark.sql.types import StringType
 
 FUSO_BRASIL = "America/Sao_Paulo"
 DINHEIRO = "decimal(12,2)"
@@ -50,6 +51,21 @@ REGRAS_VENDAS = {
     "desconto_maior_que_valor": "desconto > valor_bruto",
 }
 
+# Estrutura dos campos aninhados dos JSONs. O Auto Loader entrega cada um como texto
+# (ver D12 em docs/decisoes.md); a Silver converte com estes schemas. As folhas também
+# são STRING: a tipagem continua explícita, com cast, como no resto da Silver (D04).
+ESQUEMAS_JSON_PEDIDOS = {
+    "cliente": "STRUCT<id_cliente: STRING, email: STRING>",
+    "itens": "ARRAY<STRUCT<sku: STRING, quantidade: STRING, preco_unitario: STRING, desconto: STRING>>",
+    "pagamento": "STRUCT<metodo: STRING, parcelas: STRING>",
+    "entrega": "STRUCT<modalidade: STRING, id_loja_retirada: STRING, uf: STRING, valor_frete: STRING>",
+}
+ESQUEMAS_JSON_CLIENTES = {
+    "endereco": "STRUCT<cidade: STRING, uf: STRING>",
+    "programa_fidelidade": "STRUCT<cartao_trama: STRING>",
+    "consentimentos": "STRUCT<aceita_marketing: STRING>",
+}
+
 
 # --------------------------------------------------------------------------
 # Funções auxiliares
@@ -80,6 +96,20 @@ def para_horario_brasilia(coluna_utc: Column) -> Column:
 def vazio_para_nulo(coluna: str) -> Column:
     texto = F.trim(F.col(coluna).cast("string"))
     return F.when(texto == "", None).otherwise(texto)
+
+
+def expandir_json(df: DataFrame, esquemas: dict[str, str]) -> DataFrame:
+    """Converte colunas com texto JSON (como o Auto Loader entrega) em struct/array.
+
+    Coluna que já é struct ou array fica como está, então a função funciona tanto com a
+    Bronze real quanto com DataFrames montados à mão nos testes. JSON inválido não derruba
+    o lote: os campos viram nulos e a linha cai nas regras de qualidade (ex.: `sku_ausente`).
+    """
+    tipos = {campo.name: campo.dataType for campo in df.schema.fields}
+    for coluna, esquema in esquemas.items():
+        if isinstance(tipos.get(coluna), StringType):
+            df = df.withColumn(coluna, F.from_json(F.col(coluna), esquema))
+    return df
 
 
 def manter_mais_recente(df: DataFrame, chaves: list[str], ordem: str) -> DataFrame:
@@ -148,7 +178,7 @@ def preparar_pedidos_ecommerce(df: DataFrame) -> DataFrame:
     2. Explode o array de itens: uma linha por item, como no PDV.
     3. Converte UTC para o horário de Brasília.
     """
-    eventos = df.withColumn("_atualizado_utc", utc_para_ntz("atualizado_em"))
+    eventos = expandir_json(df, ESQUEMAS_JSON_PEDIDOS).withColumn("_atualizado_utc", utc_para_ntz("atualizado_em"))
     pedidos = manter_mais_recente(eventos, ["pedido_id"], "_atualizado_utc")
     itens = pedidos.select("*", F.posexplode("itens").alias("_posicao", "_item"))
     padronizado = itens.select(
@@ -179,7 +209,9 @@ def preparar_pedidos_ecommerce(df: DataFrame) -> DataFrame:
 
 def padronizar_clientes(df: DataFrame) -> DataFrame:
     """CRM: e-mail e nome padronizados; CPF vira hash (LGPD: a Silver não guarda o CPF)."""
-    com_data = df.withColumn("atualizado_em", F.to_timestamp_ntz(F.col("atualizado_em")))
+    com_data = expandir_json(df, ESQUEMAS_JSON_CLIENTES).withColumn(
+        "atualizado_em", F.to_timestamp_ntz(F.col("atualizado_em"))
+    )
     recentes = manter_mais_recente(com_data, ["id_cliente"], "atualizado_em")
     cpf_somente_digitos = F.regexp_replace("cpf", r"\D", "")
     return recentes.select(

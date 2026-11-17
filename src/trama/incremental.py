@@ -40,9 +40,21 @@ def montar_merge_sql(
     return "\n".join(linhas)
 
 
-def _merge(lote: DataFrame, destino: str, chaves: list[str], coluna_versao: str | None, somente_inserir: bool) -> None:
+def _merge(
+    lote: DataFrame,
+    destino: str,
+    chaves: list[str],
+    coluna_versao: str | None,
+    somente_inserir: bool,
+    agrupar_por: list[str] | None = None,
+) -> None:
     sessao = lote.sparkSession  # no foreachBatch, use a sessão do próprio lote
-    lote.limit(0).write.mode("ignore").saveAsTable(destino)  # cria a tabela vazia na 1ª execução
+    # Cria a tabela vazia na 1ª execução, já com o Liquid Clustering definido (D13).
+    # Nas execuções seguintes, o modo "ignore" não faz nada.
+    escritor = lote.limit(0).write.mode("ignore")
+    if agrupar_por:
+        escritor = escritor.clusterBy(*agrupar_por)
+    escritor.saveAsTable(destino)
     visao = "lote_" + destino.replace(".", "_")
     lote.createOrReplaceTempView(visao)
     sessao.sql(montar_merge_sql(destino, visao, chaves, coluna_versao, somente_inserir))
@@ -58,11 +70,14 @@ def processar_incremental(
     coluna_versao: str | None = None,
     regras: dict[str, str] | None = None,
     destino_rejeitados: str | None = None,
+    agrupar_por: list[str] | None = None,
 ) -> None:
     """Lê as linhas novas da tabela `origem`, transforma e faz MERGE em `destino`.
 
     Se `regras` for informado, as linhas reprovadas vão para `destino_rejeitados`
     (quarentena) com o motivo, em vez de entrarem na Silver.
+
+    `agrupar_por` define as colunas do Liquid Clustering na criação da tabela `destino`.
     """
 
     def processar_lote(lote: DataFrame, lote_id: int) -> None:
@@ -73,7 +88,7 @@ def processar_incremental(
                 "processado_em", F.current_timestamp()
             )
             _merge(rejeitados, destino_rejeitados, chaves, None, somente_inserir=True)
-        _merge(dados, destino, chaves, coluna_versao, somente_inserir=False)
+        _merge(dados, destino, chaves, coluna_versao, somente_inserir=False, agrupar_por=agrupar_por)
 
     consulta = (
         spark.readStream.table(origem)

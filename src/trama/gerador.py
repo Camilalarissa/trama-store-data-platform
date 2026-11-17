@@ -28,6 +28,7 @@ import random
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 SEMENTE_CADASTROS = 42
 QTD_PRODUTOS = 300
@@ -483,6 +484,20 @@ def gerar_dia(dia: date, destino: str | Path, carga_inicial: bool = False) -> di
     contagens["estoque"] = len(linhas)
 
     return contagens
+
+
+def hoje_brasilia() -> date:
+    """Data de hoje no horário de Brasília.
+
+    O serverless roda em UTC: depois das 21h de Brasília, `date.today()` já devolve o dia seguinte.
+    """
+    return datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+
+
+def ja_tem_carga_inicial(destino: str | Path) -> bool:
+    """True se a landing já recebeu a carga inicial dos cadastros (pasta erp_lojas com arquivo)."""
+    pasta = Path(destino) / "erp_lojas"
+    return pasta.is_dir() and any(pasta.iterdir())
 
 
 def gerar_periodo(inicio: date, fim: date, destino: str | Path) -> dict[str, int]:
